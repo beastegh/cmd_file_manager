@@ -250,6 +250,9 @@ if /i "!cmdInput!"=="make" (
   goto loop
 )
 
+:: Проверка команды обновления (r)
+if /i "!cmdInput!"=="r" goto loop
+
 :: Проверяем, число ли cmdInput 
 set "isNumber=1"
 for /f "delims=0123456789" %%x in ("!cmdInput!") do set "isNumber=0"
