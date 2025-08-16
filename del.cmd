@@ -27,6 +27,11 @@ set "is_trash=0"
 if /i "%~dp1"=="!recycle!\" set "is_trash=1"
 
 if !is_trash!==1 (
+  :: Проверяем, не является ли файл log.txt
+  if /i "%~nx1"=="log.txt" (
+    echo Нельзя удалить log.txt.
+    exit /b 1
+  )
   :: Permanent delete
   echo [DEBUG] Проверка: является ли "%target%" папкой...
   if exist "%target%\*" (
@@ -70,7 +75,45 @@ if !is_trash!==1 (
       goto wait_remove_file
     )
   )
+  :: Удаляем соответствующую строку из log.txt
+  set "log_file=!recycle!\log.txt"
+  if exist "!log_file!" (
+    set "temp_log=%temp%\log_temp_%random%.txt"
+    set "found=0"
+    type nul > "!temp_log!"
+    for /f "delims=" %%l in ('type "!log_file!"') do (
+      set "line=%%l"
+      set "write_line=1"
+      for /f "tokens=1 delims=|" %%a in ("!line!") do (
+        set "log_name=%%a"
+        :: Убираем trailing spaces с log_name
+        set "log_name=!log_name: =!"
+        if /i "!log_name!"=="%~nx1" (
+          set "write_line=0"
+          set "found=1"
+        )
+      )
+      if !write_line! equ 1 (
+        echo !line!>>"!temp_log!"
+      )
+    )
+    if !found! equ 1 (
+      move /y "!temp_log!" "!log_file!" >nul 2>nul
+      if errorlevel 1 (
+        echo Ошибка при обновлении log.txt.
+        del "!temp_log!" 2>nul
+        exit /b 1
+      )
+    ) else (
+      del "!temp_log!" 2>nul
+    )
+  )
 ) else (
+  :: Проверяем, не является ли файл log.txt
+  if /i "%~nx1"=="log.txt" (
+    echo Нельзя переместить log.txt в Корзину.
+    exit /b 1
+  )
   :: Move to recycle
   if not exist "!recycle!" (
     echo [DEBUG] Создание папки Корзина: "!recycle!"
@@ -134,7 +177,7 @@ if !is_trash!==1 (
     )
   )
 
-  :: Добавляем запись в лог с пробелами
+  :: Добавляем запись в лог с пробелами, только если это не log.txt
   echo !name!  ^|  !timestamp!  ^|  !orig_path!  ^|  !size! >> "!log_file!"
 )
 

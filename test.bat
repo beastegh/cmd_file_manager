@@ -23,7 +23,7 @@ if "!folder:~1,2!"==":\" goto no_slash_to_remove
 set "folder=!folder:~0,-1!"
 :no_slash_to_remove
 
-:: 25 пробелов установить отступ одинаковый !!! не трогать
+:: 25 пробелов установить отступ одинаковый
 set "spc=                                                "
 
 :loop
@@ -43,13 +43,42 @@ if not defined fileCount set /a fileCount=0
 set /a testTotal=!totalCount! 2>nul || set /a totalCount=0
 set /a testFolder=!folderCount! 2>nul || set /a folderCount=0
 set /a testFile=!fileCount! 2>nul || set /a fileCount=0
-REM echo DEBUG: After path.cmd - totalCount=[!totalCount!] folderCount=[!folderCount!] fileCount=[!fileCount!]
 
-:: Вывод элементов itemName и itemType для отладки
-for /L %%j in (1,1,!totalCount!) do (
-  call set "name=%%itemName[%%j]%%"
-  call set "type=%%itemType[%%j]%%"
-  REM echo DEBUG: item[%%j] name=[!name!] type=[!type!]
+set "isRecycle=0"
+if /i "!folder!"=="C:\Корзина" set "isRecycle=1"
+
+:: Если в корзине, исключить log.txt из списков
+if !isRecycle!==1 (
+  set found=0
+  set /a origTotal=!totalCount!
+  for /L %%i in (1,1,!origTotal!) do (
+    if !found!==0 (
+      call set "name=%%itemName[%%i]%%"
+      call set "type=%%itemType[%%i]%%"
+      if /i "!name!"=="log.txt" (
+        set found=1
+        set /a totalCount-=1
+        if "!type!"=="f" set /a fileCount-=1
+        if "!type!"=="p" set /a folderCount-=1
+      ) else (
+        if !found!==1 (
+          set /a newIdx=%%i -1
+          set "itemName[!newIdx!]=!name!"
+          set "itemType[!newIdx!]=!type!"
+        )
+      )
+    ) else (
+      call set "name=%%itemName[%%i]%%"
+      call set "type=%%itemType[%%i]%%"
+      set /a newIdx=%%i -1
+      set "itemName[!newIdx!]=!name!"
+      set "itemType[!newIdx!]=!type!"
+    )
+  )
+  if !found!==1 (
+    set "itemName[!totalCount!]="
+    set "itemType[!totalCount!]="
+  )
 )
 
 if !totalCount! equ 0 (
@@ -67,7 +96,6 @@ if !folderCount! gtr 0 (
   for /L %%r in (1,1,!rows!) do (
     set /a leftIdx=%%r
     set /a rightIdx=%%r+!rows!
-
     if !leftIdx! leq !folderCount! (
       call set "nameLeft=%%itemName[!leftIdx!]%%"
       if defined nameLeft (
@@ -81,7 +109,6 @@ if !folderCount! gtr 0 (
     ) else (
       <nul set /p ="                                             "
     )
-
     if !rightIdx! leq !folderCount! (
       call set "nameRight=%%itemName[!rightIdx!]%%"
       if defined nameRight (
@@ -109,7 +136,6 @@ if !fileCount! gtr 0 (
   for /L %%r in (1,1,!fileRows!) do (
     set /a leftIdx=%%r + fileStart - 1
     set /a rightIdx=%%r + fileRows + fileStart - 1
-
     if !leftIdx! leq !totalCount! (
       call set "nameLeft=%%itemName[!leftIdx!]%%"
       if defined nameLeft (
@@ -123,7 +149,6 @@ if !fileCount! gtr 0 (
     ) else (
       <nul set /p ="                                             "
     )
-
     if !rightIdx! leq !totalCount! (
       call set "nameRight=%%itemName[!rightIdx!]%%"
       if defined nameRight (
@@ -153,7 +178,6 @@ if not defined choice goto loop
 
 :: Очищаем ввод от лишних пробелов и кавычек
 set "choice=%choice:"=%"
-:: Удаляем лишние пробелы только в начале и конце
 for /f "tokens=*" %%a in ("!choice!") do set "choice=%%a"
 
 :: Разбиваем ввод на команду и параметр
@@ -161,7 +185,6 @@ for /f "tokens=1*" %%a in ("!choice!") do (
   set "cmdInput=%%a"
   set "cmdParam=%%b"
 )
-REM echo DEBUG: cmdInput=[!cmdInput!] cmdParam=[!cmdParam!]
 
 if /i "!cmdInput!"=="q" goto end
 
@@ -201,45 +224,111 @@ if /i "!cmdInput!"=="b" (
 
 :: Проверка команды удаления
 if /i "!cmdInput!"=="del" (
-  REM echo DEBUG: Entered del block, cmdParam=[!cmdParam!]
   if not defined cmdParam (
-    echo Укажите номер для удаления, например: del 3
+    echo Укажите номер для удаления, например: del 3 или del all или del 1 ^| 5 ^| 7
     goto choose
   )
-  for /f "tokens=1" %%n in ("!cmdParam!") do set "delNum=%%~n"
-  REM echo DEBUG: delNum=[!delNum!]
-  set /a delNum=delNum 2>nul
-  if "!delNum!"=="" (
-    echo Некорректный номер для удаления.
-    goto choose
+  :: Проверка команды del all
+  if /i "!cmdParam!"=="all" (
+    if !totalCount! equ 0 (
+      echo Нет элементов для удаления.
+      goto choose
+    )
+    echo DEBUG: Начало del all, totalCount=!totalCount!>>debug.log
+    set /a tempTotal=!totalCount!
+    set "success=1"
+    for /L %%o in (1,1,!tempTotal!) do (
+      call set "delName=%%itemName[%%o]%%"
+      call set "delType=%%itemType[%%o]%%"
+      set "delName=!delName:"=!"
+      echo DEBUG: Обработка %%o: delName=[!delName!] delType=[!delType!]>>debug.log
+      if defined delName if exist "!folder!\!delName!" (
+        if !isRecycle!==0 (
+          call del.cmd "!folder!\!delName!"
+          if errorlevel 1 (
+            echo DEBUG: Ошибка del.cmd для "!delName!">>debug.log
+            set "success=0"
+          ) else (
+            echo DEBUG: Успешно удалено "!delName!">>debug.log
+          )
+        ) else if /i not "!delName!"=="log.txt" (
+          call del.cmd "!folder!\!delName!"
+          if errorlevel 1 (
+            echo DEBUG: Ошибка del.cmd для "!delName!">>debug.log
+            set "success=0"
+          ) else (
+            echo DEBUG: Успешно удалено "!delName!">>debug.log
+          )
+        )
+      ) else (
+        echo DEBUG: Пропуск %%o: delName=[!delName!] не определён или не существует>>debug.log
+      )
+    )
+    if !success!==1 (
+      echo DEBUG: Очистка массивов>>debug.log
+      for /L %%d in (1,1,!tempTotal!) do (
+        set "itemName[%%d]="
+        set "itemType[%%d]="
+      )
+      set /a totalCount=0
+      set /a folderCount=0
+      set /a fileCount=0
+    )
+    echo DEBUG: Завершение del all, success=!success!>>debug.log
+    goto loop
   )
-  if !delNum! lss 1 (
-    echo Номер для удаления должен быть >= 1.
-    goto choose
+  :: Проверка удаления по номерам (одиночный или множественный)
+  echo DEBUG: Начало обработки номеров: cmdParam=[!cmdParam!]>>debug.log
+  set "success=1"
+  for /f "tokens=1-10 delims=|" %%n in ("!cmdParam!") do (
+    for %%N in (%%n %%o %%p %%q %%r %%s %%t %%u %%v %%w) do (
+      set "delNum=%%N"
+      set "delNum=!delNum: =!"
+      if defined delNum (
+        set /a delNum=delNum 2>nul
+        if !delNum! equ 0 (
+          echo Некорректный номер: "!delNum!".
+          set "success=0"
+        ) else if !delNum! lss 1 (
+          echo Номер для удаления должен быть >= 1: "!delNum!".
+          set "success=0"
+        ) else if !delNum! gtr !totalCount! (
+          echo Номер превышает количество элементов: "!delNum!".
+          set "success=0"
+        ) else (
+          call set "delName=%%itemName[!delNum!]%%"
+          call set "delType=%%itemType[!delNum!]%%"
+          echo DEBUG: Проверка номера !delNum!: delName=[!delName!] delType=[!delType!]>>debug.log
+          if not defined delName (
+            echo Элемент с номером !delNum! не найден.
+            set "success=0"
+          ) else if not exist "!folder!\!delName!" (
+            echo Элемент "!delName!" не найден в каталоге.
+            set "success=0"
+          ) else (
+            call del.cmd "!folder!\!delName!"
+            if errorlevel 1 (
+              echo DEBUG: Ошибка del.cmd для "!delName!" с номером !delNum!>>debug.log
+              set "success=0"
+            ) else (
+              echo DEBUG: Успешно удалено "!delName!" с номером !delNum!>>debug.log
+            )
+          )
+        )
+      )
+    )
   )
-  if !delNum! gtr !totalCount! (
-    echo Номер для удаления превышает количество элементов.
-    goto choose
+  if !success!==0 (
+    echo Ошибка при удалении одного или нескольких элементов.
   )
-  call set "delName=%%itemName[!delNum!]%%"
-  call set "delType=%%itemType[!delNum!]%%"
-  REM echo DEBUG: delName=[!delName!] delType=[!delType!]
-  if not defined delName (
-    echo Элемент с номером !delNum! не найден.
-    goto choose
-  )
-  if not exist "!folder!\!delName!" (
-    echo Элемент "!delName!" не найден в каталоге.
-    goto choose
-  )
-  call del.cmd "!folder!\!delName!"
+  echo DEBUG: Завершение обработки номеров, success=!success!>>debug.log
   goto loop
 )
 
 :: Проверка команды создания (make)
 if /i "!cmdInput!"=="make" (
   if not defined cmdParam (
-    echo Укажите имя файла/папки для создания, например: make file.txt или make folder1 | folder two
+    echo Укажите имя файла/папки для создания, например: make file.txt или make folder1 ^| folder two
     goto choose
   )
   call make.cmd "!folder!" "!cmdParam!"
@@ -263,13 +352,11 @@ if "!isNumber!"=="1" (
     echo Номер больше количества элементов.
     goto choose
   )
-
   call :getItemInfo !selNum!
   if not defined selectedType (
     echo Ошибка: не найден выбранный элемент.
     goto choose
   )
-
   if "!selectedType!"=="p" (
     if "!folder:~-1!"=="\" (
       set "folder=!folder!!selectedName!"
