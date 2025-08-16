@@ -41,7 +41,7 @@ if !hasPipe! equ 1 if !hasArrow! equ 1 (
 )
 
 if !hasPipe! equ 1 (
-  :: Множественное создание папок
+  :: Множественное создание папок или файлов
   set "params=!makeParam!"
   set "created=0"
   :loop_multiple
@@ -51,14 +51,26 @@ if !hasPipe! equ 1 (
     call :trim "!name!" name
     if "!name!"=="" goto skip_multiple
     if exist "!currentFolder!\!name!" (
-      echo Папка "!name!" уже существует.
+      echo Элемент "!name!" уже существует.
     ) else (
-      mkdir "!currentFolder!\!name!" 2>nul
-      if errorlevel 1 (
-        echo Ошибка создания папки "!name!".
+      set "isFile=0"
+      if "!name!" NEQ "!name:.=#!" set "isFile=1"
+      if !isFile! equ 1 (
+        type nul > "!currentFolder!\!name!" 2>nul
+        if errorlevel 1 (
+          echo Ошибка создания файла "!name!".
+        ) else (
+          echo Файл "!name!" создан.
+          set /a created+=1
+        )
       ) else (
-        echo Папка "!name!" создана.
-        set /a created+=1
+        mkdir "!currentFolder!\!name!" 2>nul
+        if errorlevel 1 (
+          echo Ошибка создания папки "!name!".
+        ) else (
+          echo Папка "!name!" создана.
+          set /a created+=1
+        )
       )
     )
     :skip_multiple
@@ -66,7 +78,7 @@ if !hasPipe! equ 1 (
   )
   goto loop_multiple
   :end_multiple
-  if !created! equ 0 echo Нет новых папок для создания.
+  if !created! equ 0 echo Нет новых элементов для создания.
   exit /b 0
 )
 
@@ -107,7 +119,7 @@ if !hasArrow! equ 1 (
   exit /b 0
 )
 
-:: Одиночное создание (файл или папка) — без изменений
+:: Одиночное создание (файл или папка)
 set "name=!makeParam!"
 call :trim "!name!" name
 if "!name!"=="" (

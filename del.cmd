@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 
 set "target=%~1"
 
-echo [DEBUG] Входной путь: "%target%"
+echo [DEBUG] Входной путь: "%target%" >>debug.log
 
 if not defined target (
   echo Ошибка: Не указан путь для удаления.
@@ -16,11 +16,11 @@ if not exist "%target%" (
   exit /b 1
 )
 
-echo [DEBUG] Атрибуты до снятия:
-attrib "%target%" 2>nul
+echo [DEBUG] Атрибуты до снятия:>>debug.log
+attrib "%target%" >>debug.log 2>nul
 attrib -h -s -r "%target%" 2>nul
-echo [DEBUG] Атрибуты после снятия:
-attrib "%target%" 2>nul
+echo [DEBUG] Атрибуты после снятия:>>debug.log
+attrib "%target%" >>debug.log 2>nul
 
 set "recycle=C:\Корзина"
 set "is_trash=0"
@@ -33,9 +33,9 @@ if !is_trash!==1 (
     exit /b 1
   )
   :: Permanent delete
-  echo [DEBUG] Проверка: является ли "%target%" папкой...
+  echo [DEBUG] Проверка: является ли "%target%" папкой...>>debug.log
   if exist "%target%\*" (
-    echo [DEBUG] Это папка
+    echo [DEBUG] Это папка>>debug.log
     rd /s /q "%target%" 2>nul
     if errorlevel 1 (
       echo Ошибка при удалении папки "%target%".
@@ -45,7 +45,7 @@ if !is_trash!==1 (
     set /a tries=0
     :wait_remove_folder
     if exist "%target%" (
-      echo [DEBUG] Попытка !tries!: папка существует.
+      echo [DEBUG] Попытка !tries!: папка существует.>>debug.log
       if !tries! geq 10 (
         echo Папка "%target%" все еще существует после удаления.
         exit /b 1
@@ -55,7 +55,7 @@ if !is_trash!==1 (
       goto wait_remove_folder
     )
   ) else (
-    echo [DEBUG] Это файл
+    echo [DEBUG] Это файл>>debug.log
     del /f /q "%target%" 2>nul
     if errorlevel 1 (
       echo Ошибка при удалении файла "%target%".
@@ -65,7 +65,7 @@ if !is_trash!==1 (
     set /a tries=0
     :wait_remove_file
     if exist "%target%" (
-      echo [DEBUG] Попытка !tries!: файл существует.
+      echo [DEBUG] Попытка !tries!: файл существует.>>debug.log
       if !tries! geq 10 (
         echo Файл "%target%" все еще существует после удаления.
         exit /b 1
@@ -86,7 +86,6 @@ if !is_trash!==1 (
       set "write_line=1"
       for /f "tokens=1 delims=|" %%a in ("!line!") do (
         set "log_name=%%a"
-        :: Убираем trailing spaces с log_name
         set "log_name=!log_name: =!"
         if /i "!log_name!"=="%~nx1" (
           set "write_line=0"
@@ -116,7 +115,7 @@ if !is_trash!==1 (
   )
   :: Move to recycle
   if not exist "!recycle!" (
-    echo [DEBUG] Создание папки Корзина: "!recycle!"
+    echo [DEBUG] Создание папки Корзина: "!recycle!">>debug.log
     mkdir "!recycle!" 2>nul
     if errorlevel 1 (
       echo Ошибка при создании папки Корзина.
@@ -126,13 +125,14 @@ if !is_trash!==1 (
 
   set "name=%~nx1"
   set "orig_path=%~dp1"
+  set "orig_path=!orig_path:~0,-1!"
   set "timestamp=%date% в %time:~0,8%"
   set "log_file=!recycle!\log.txt"
 
   :: Проверяем, папка ли это
-  echo [DEBUG] Проверка: является ли "%target%" папкой...
+  echo [DEBUG] Проверка: является ли "%target%" папкой...>>debug.log
   if exist "%target%\*" (
-    echo [DEBUG] Это папка
+    echo [DEBUG] Это папка>>debug.log
     :: Рассчитываем размер папки
     for /f "tokens=3" %%a in ('dir /s /a /-c "%target%" 2^>nul ^| find "File(s)"') do set "size=%%a"
     move "%target%" "!recycle!\" >nul 2>nul
@@ -144,7 +144,7 @@ if !is_trash!==1 (
     set /a tries=0
     :wait_move_folder
     if exist "%target%" (
-      echo [DEBUG] Попытка !tries!: папка существует.
+      echo [DEBUG] Попытка !tries!: папка существует.>>debug.log
       if !tries! geq 10 (
         echo Папка "%target%" все еще существует после перемещения.
         exit /b 1
@@ -154,7 +154,7 @@ if !is_trash!==1 (
       goto wait_move_folder
     )
   ) else (
-    echo [DEBUG] Это файл
+    echo [DEBUG] Это файл>>debug.log
     :: Рассчитываем размер файла
     for /f "tokens=3" %%a in ('dir /a /-c "%target%" 2^>nul ^| find "File(s)"') do set "size=%%a"
     move "%target%" "!recycle!\" >nul 2>nul
@@ -166,7 +166,7 @@ if !is_trash!==1 (
     set /a tries=0
     :wait_move_file
     if exist "%target%" (
-      echo [DEBUG] Попытка !tries!: файл существует.
+      echo [DEBUG] Попытка !tries!: файл существует.>>debug.log
       if !tries! geq 10 (
         echo Файл "%target%" все еще существует после перемещения.
         exit /b 1
@@ -177,8 +177,8 @@ if !is_trash!==1 (
     )
   )
 
-  :: Добавляем запись в лог с пробелами, только если это не log.txt
-  echo !name!  ^|  !timestamp!  ^|  !orig_path!  ^|  !size! >> "!log_file!"
+  :: Добавляем запись в лог без лишних пробелов
+  echo !name!^|!timestamp!^|!orig_path!^|!size!>>"!log_file!"
 )
 
 exit /b 0
