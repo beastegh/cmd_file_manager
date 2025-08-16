@@ -177,6 +177,12 @@ if /i "!cmdInput!"=="disk" (
   goto loop
 )
 
+:: Проверка команды перехода в Корзину
+if /i "!cmdInput!"=="trash" (
+  set "folder=C:\Корзина"
+  goto loop
+)
+
 :: Проверка команды возврат
 if /i "!cmdInput!"=="b" (
   for %%A in ("!folder!") do set "parent=%%~dpA"
@@ -192,16 +198,6 @@ if /i "!cmdInput!"=="b" (
   )
   goto loop
 )
-
-:: Переход по букве диска
-@REM set "foundDrive="
-@REM for %%D in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
-@REM   if /i "!cmdInput!"=="%%D" (
-@REM     set "folder=%%D:\"
-@REM     set "foundDrive=1"
-@REM   )
-@REM )
-@REM if defined foundDrive goto loop
 
 :: Проверка команды удаления
 if /i "!cmdInput!"=="del" (
