@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 set "recycle=%~1"
 set "name=%~2"
 
-echo DEBUG: restore.bat - Входные параметры: recycle=[!recycle!] name=[!name!]>>"!recycle!\debug.log"
+echo DEBUG: restore.cmd - Входные параметры: recycle=[!recycle!] name=[!name!]>>"!recycle!\debug.log"
 
 if "!recycle!"=="" (
   echo Ошибка: Не указана папка Корзина.
@@ -42,18 +42,23 @@ if not exist "!recycle!\!name!" (
 set "orig_path="
 set "found_entry=0"
 echo DEBUG: Чтение log.txt для поиска "!name!">>"!recycle!\debug.log"
+echo DEBUG: Содержимое log.txt:>>"!recycle!\debug.log"
+type "!log_file!" >>"!recycle!\debug.log" 2>&1
 
 for /f "usebackq delims=" %%a in ("!log_file!") do (
   set "line=%%a"
-  echo DEBUG: Обработка строки: [!line!]>>"!recycle!\debug.log"
-  
   if not "!line!"=="" (
-    :: Парсим строку по разделителю |
-    for /f "tokens=1,2,3,4 delims=|" %%i in ("!line!") do (
-      set "log_name=%%i"
-      set "log_timestamp=%%j"
-      set "log_path=%%k"
-      set "log_size=%%l"
+    echo DEBUG: Обработка строки: [!line!]>>"!recycle!\debug.log"
+    
+    :: Разделяем строку по символу |
+    :: Формат: name|timestamp|path|size
+    for /f "tokens=1,3 delims=|" %%b in ("!line!") do (
+      set "log_name=%%b"
+      set "log_path=%%c"
+      
+      :: Убираем возможные пробелы в начале и конце
+      call :trim "!log_name!" log_name
+      call :trim "!log_path!" log_path
       
       echo DEBUG: Парсинг: log_name=[!log_name!] log_path=[!log_path!]>>"!recycle!\debug.log"
       
@@ -104,20 +109,18 @@ if exist "!orig_path!\!name!" (
 :: Перемещение файла или папки из корзины в исходное место
 echo DEBUG: Перемещение "!recycle!\!name!" в "!orig_path!\">>"!recycle!\debug.log"
 move "!recycle!\!name!" "!orig_path!\" >nul 2>&1
-set "move_result=!errorlevel!"
-echo DEBUG: Команда move вернула errorlevel=!move_result!>>"!recycle!\debug.log"
-if !move_result! neq 0 (
+if errorlevel 1 (
   echo Ошибка при восстановлении "!name!" в "!orig_path!".
-  echo DEBUG: Ошибка move "!recycle!\!name!" "!orig_path!\" (errorlevel=!move_result!)>>"!recycle!\debug.log"
+  echo DEBUG: Ошибка move "!recycle!\!name!" "!orig_path!\" (errorlevel=!errorlevel!)>>"!recycle!\debug.log"
   exit /b 1
 )
 
 echo Восстановлен "!name!" в "!orig_path!".
 echo DEBUG: Успешно восстановлен "!name!" в "!orig_path!">>"!recycle!\debug.log"
 
-:: Удаляем запись из log.txt
-echo DEBUG: Удаление записи из log.txt>>"!recycle!\debug.log"
-set "temp_log=!recycle!\log_temp_%random%_%time:~6,2%.txt"
+:: Удаление записи из log.txt
+echo DEBUG: Удаление записи для "!name!" из log.txt>>"!recycle!\debug.log"
+set "temp_log=%temp%\log_temp_%random%.txt"
 set "record_removed=0"
 
 if exist "!temp_log!" del "!temp_log!" >nul 2>&1
@@ -127,8 +130,10 @@ for /f "usebackq delims=" %%a in ("!log_file!") do (
   set "write_line=1"
   
   if not "!line!"=="" (
-    for /f "tokens=1 delims=|" %%i in ("!line!") do (
-      set "line_name=%%i"
+    :: Проверяем, содержит ли строка наш файл
+    for /f "tokens=1 delims=|" %%b in ("!line!") do (
+      set "line_name=%%b"
+      call :trim "!line_name!" line_name
       
       if "!line_name!"=="!name!" (
         set "write_line=0"
@@ -158,5 +163,15 @@ if !record_removed!==1 (
   if exist "!temp_log!" del "!temp_log!" >nul 2>&1
 )
 
-echo DEBUG: Завершение restore.bat, успешно>>"!recycle!\debug.log"
+echo DEBUG: Завершение restore.cmd, успешно>>"!recycle!\debug.log"
 exit /b 0
+
+:trim
+setlocal enabledelayedexpansion
+set "str=%~1"
+:trimleft
+if "!str:~0,1!"==" " set "str=!str:~1!" & goto trimleft
+:trimright
+if "!str:~-1!"==" " set "str=!str:~0,-1!" & goto trimright
+endlocal & set "%2=%str%"
+goto :eof

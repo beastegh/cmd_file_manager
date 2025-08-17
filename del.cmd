@@ -41,7 +41,7 @@ if !is_trash!==1 (
       echo Ошибка при удалении папки "%target%".
       exit /b 1
     )
-    :: Ждем пока папка удалится, максимум 10 попыток по 3 секунды
+    :: Ждем пока папка удалится, максимум 10 попыток по 1 секунде
     set /a tries=0
     :wait_remove_folder
     if exist "%target%" (
@@ -50,7 +50,7 @@ if !is_trash!==1 (
         echo Папка "%target%" все еще существует после удаления.
         exit /b 1
       )
-      ping -n 4 localhost >nul
+      ping -n 2 localhost >nul
       set /a tries+=1
       goto wait_remove_folder
     )
@@ -61,7 +61,7 @@ if !is_trash!==1 (
       echo Ошибка при удалении файла "%target%".
       exit /b 1
     )
-    :: Ждем пока файл удалится, максимум 10 попыток по 3 секунды
+    :: Ждем пока файл удалится, максимум 10 попыток по 1 секунде
     set /a tries=0
     :wait_remove_file
     if exist "%target%" (
@@ -70,7 +70,7 @@ if !is_trash!==1 (
         echo Файл "%target%" все еще существует после удаления.
         exit /b 1
       )
-      ping -n 4 localhost >nul
+      ping -n 2 localhost >nul
       set /a tries+=1
       goto wait_remove_file
     )
@@ -78,33 +78,49 @@ if !is_trash!==1 (
   :: Удаляем соответствующую строку из log.txt
   set "log_file=!recycle!\log.txt"
   if exist "!log_file!" (
-    set "temp_log=%temp%\log_temp_%random%.txt"
+    echo [DEBUG] Удаление записи "%~nx1" из log.txt>>debug.log
+    set "temp_log=!recycle!\log_temp_%random%_%time:~6,2%.txt"
     set "found=0"
-    type nul > "!temp_log!"
-    for /f "delims=" %%l in ('type "!log_file!"') do (
+    
+    if exist "!temp_log!" del "!temp_log!" >nul 2>&1
+    
+    for /f "usebackq delims=" %%l in ("!log_file!") do (
       set "line=%%l"
       set "write_line=1"
-      for /f "tokens=1 delims=|" %%a in ("!line!") do (
-        set "log_name=%%a"
-        set "log_name=!log_name: =!"
-        if /i "!log_name!"=="%~nx1" (
-          set "write_line=0"
-          set "found=1"
+      
+      if not "!line!"=="" (
+        echo [DEBUG] Проверка строки: [!line!]>>debug.log
+        
+        for /f "tokens=1 delims=|" %%a in ("!line!") do (
+          set "log_name=%%a"
+          echo [DEBUG] Сравнение: log_name=[!log_name!] с [%~nx1]>>debug.log
+          
+          if /i "!log_name!"=="%~nx1" (
+            set "write_line=0"
+            set "found=1"
+            echo [DEBUG] Найдена запись для удаления: [!line!]>>debug.log
+          )
         )
       )
+      
       if !write_line! equ 1 (
         echo !line!>>"!temp_log!"
       )
     )
+    
     if !found! equ 1 (
-      move /y "!temp_log!" "!log_file!" >nul 2>nul
+      move /y "!temp_log!" "!log_file!" >nul 2>&1
       if errorlevel 1 (
         echo Ошибка при обновлении log.txt.
-        del "!temp_log!" 2>nul
+        echo [DEBUG] Ошибка move "!temp_log!" "!log_file!" (errorlevel=!errorlevel!)>>debug.log
+        if exist "!temp_log!" del "!temp_log!" >nul 2>&1
         exit /b 1
+      ) else (
+        echo [DEBUG] Запись "%~nx1" успешно удалена из log.txt>>debug.log
       )
     ) else (
-      del "!temp_log!" 2>nul
+      echo [DEBUG] Запись "%~nx1" не найдена в log.txt>>debug.log
+      if exist "!temp_log!" del "!temp_log!" >nul 2>&1
     )
   )
 ) else (
@@ -134,13 +150,14 @@ if !is_trash!==1 (
   if exist "%target%\*" (
     echo [DEBUG] Это папка>>debug.log
     :: Рассчитываем размер папки
-    for /f "tokens=3" %%a in ('dir /s /a /-c "%target%" 2^>nul ^| find "File(s)"') do set "size=%%a"
-    move "%target%" "!recycle!\" >nul 2>nul
+    set "size=папка"
+    for /f "tokens=3" %%a in ('dir /s /a /-c "%target%" 2^>nul ^| find "File(s)"') do if not "%%a"=="" set "size=%%a байт"
+    move "%target%" "!recycle!\" >nul 2>&1
     if errorlevel 1 (
       echo Ошибка при перемещении папки "%target%".
       exit /b 1
     )
-    :: Ждем пока папка переместится, максимум 10 попыток по 3 секунды
+    :: Ждем пока папка переместится, максимум 10 попыток по 1 секунде
     set /a tries=0
     :wait_move_folder
     if exist "%target%" (
@@ -149,20 +166,21 @@ if !is_trash!==1 (
         echo Папка "%target%" все еще существует после перемещения.
         exit /b 1
       )
-      ping -n 4 localhost >nul
+      ping -n 2 localhost >nul
       set /a tries+=1
       goto wait_move_folder
     )
   ) else (
     echo [DEBUG] Это файл>>debug.log
     :: Рассчитываем размер файла
-    for /f "tokens=3" %%a in ('dir /a /-c "%target%" 2^>nul ^| find "File(s)"') do set "size=%%a"
-    move "%target%" "!recycle!\" >nul 2>nul
+    set "size=0 байт"
+    for /f "tokens=3" %%a in ('dir /a /-c "%target%" 2^>nul ^| find "File(s)"') do if not "%%a"=="" set "size=%%a байт"
+    move "%target%" "!recycle!\" >nul 2>&1
     if errorlevel 1 (
       echo Ошибка при перемещении файла "%target%".
       exit /b 1
     )
-    :: Ждем пока файл переместится, максимум 10 попыток по 3 секунды
+    :: Ждем пока файл переместится, максимум 10 попыток по 1 секунде
     set /a tries=0
     :wait_move_file
     if exist "%target%" (
@@ -171,13 +189,14 @@ if !is_trash!==1 (
         echo Файл "%target%" все еще существует после перемещения.
         exit /b 1
       )
-      ping -n 4 localhost >nul
+      ping -n 2 localhost >nul
       set /a tries+=1
       goto wait_move_file
     )
   )
 
   :: Добавляем запись в лог без лишних пробелов
+  echo [DEBUG] Добавление записи в log.txt: !name!^|!timestamp!^|!orig_path!^|!size!>>debug.log
   echo !name!^|!timestamp!^|!orig_path!^|!size!>>"!log_file!"
 )
 
